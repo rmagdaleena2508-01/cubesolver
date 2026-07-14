@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CubeSight — scan &amp; solve your Rubik's Cube</title>
+<meta name="description" content="Point your camera at a Rubik's Cube. CubeSight reads the colors, computes a near-optimal solution, and walks you through every move in 3D." />
+<meta name="theme-color" content="#0a0c10" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0c10'/%3E%3Cg transform='translate(7,7)'%3E%3Crect width='5' height='5' rx='1' fill='%2346d68c'/%3E%3Crect x='6.5' width='5' height='5' rx='1' fill='%23e8eaee'/%3E%3Crect x='13' width='5' height='5' rx='1' fill='%23d94a4a'/%3E%3Crect y='6.5' width='5' height='5' rx='1' fill='%23f2c94c'/%3E%3Crect x='6.5' y='6.5' width='5' height='5' rx='1' fill='%232f6fd0'/%3E%3Crect x='13' y='6.5' width='5' height='5' rx='1' fill='%23f58a3c'/%3E%3Crect y='13' width='5' height='5' rx='1' fill='%23e8eaee'/%3E%3Crect x='6.5' y='13' width='5' height='5' rx='1' fill='%2346d68c'/%3E%3Crect x='13' y='13' width='5' height='5' rx='1' fill='%23f2c94c'/%3E%3C/g%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><g fill="none"><rect x="0" y="0" width="5" height="5" rx="1.2" fill="#46d68c"/><rect x="6.5" y="0" width="5" height="5" rx="1.2" fill="#e8eaee"/><rect x="13" y="0" width="5" height="5" rx="1.2" fill="#d94a4a"/><rect x="0" y="6.5" width="5" height="5" rx="1.2" fill="#f2c94c"/><rect x="6.5" y="6.5" width="5" height="5" rx="1.2" fill="#2f6fd0"/><rect x="13" y="6.5" width="5" height="5" rx="1.2" fill="#f58a3c"/><rect x="0" y="13" width="5" height="5" rx="1.2" fill="#e8eaee"/><rect x="6.5" y="13" width="5" height="5" rx="1.2" fill="#46d68c"/><rect x="13" y="13" width="5" height="5" rx="1.2" fill="#f2c94c"/></g></svg>
+    CubeSight
+  </div>
+  <div class="chip" id="solver-chip" data-testid="solver-chip"><span class="chip-dot warming"></span>solver: warming up…</div>
+</header>
+
+<!-- ─────────── HOME ─────────── -->
+<section class="screen active" id="s-home">
+  <div class="col">
+    <h1 class="hero-h">Scan it.<br /><em>Solve it.</em></h1>
+    <p class="sub">Point your camera at a Rubik's Cube. CubeSight reads all six faces, computes a near-optimal solution with Kociemba's two-phase algorithm — usually around 20 moves — and walks you through every turn in 3D.</p>
+
+    <div class="cta-row">
+      <button class="btn primary" id="btn-scan" data-testid="btn-scan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8c0-1.1.9-2 2-2h1.2l1.2-2h7.2l1.2 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+        Scan my cube
+      </button>
+      <button class="btn ghost" id="btn-demo" data-testid="btn-demo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.6" cy="8.6" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.4" cy="15.4" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.4" cy="8.6" r="1.4" fill="currentColor" stroke="none"/><circle cx="8.6" cy="15.4" r="1.4" fill="currentColor" stroke="none"/></svg>
+        Try a demo scramble
+      </button>
+    </div>
+
+    <ol class="how">
+      <li><span>01</span>Show each of the 6 faces to the camera — a grid guides you.</li>
+      <li><span>02</span>Check the detected colors; tap any sticker to fix it.</li>
+      <li><span>03</span>Follow the 3-D guide, move by move, until it clicks solved.</li>
+    </ol>
+
+    <p class="fine" id="home-err" hidden></p>
+  </div>
+</section>
+
+<!-- ─────────── SCAN ─────────── -->
+<section class="screen" id="s-scan">
+  <div class="col">
+    <div class="scan-head">
+      <div class="scan-step mono" id="scan-step" data-testid="scan-step">1 / 6</div>
+      <div class="scan-instr" id="scan-instr">…</div>
+    </div>
+
+    <div class="cam-wrap">
+      <video id="cam" autoplay playsinline muted></video>
+      <div class="cam-overlay"><div class="cam-grid" id="cam-grid">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div></div>
+    </div>
+
+    <div class="thumbs" id="thumbs"></div>
+
+    <div class="cta-row">
+      <button class="btn primary grow" id="btn-capture" data-testid="btn-capture">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></svg>
+        Capture face
+      </button>
+      <button class="btn ghost" id="btn-retake" data-testid="btn-retake" disabled>Retake</button>
+      <button class="btn ghost" id="btn-cancel">Cancel</button>
+    </div>
+    <p class="fine">Fill the grid with the face · avoid glare · space bar works too</p>
+  </div>
+</section>
+
+<!-- ─────────── REVIEW ─────────── -->
+<section class="screen" id="s-review">
+  <div class="col wide">
+    <div class="scan-head">
+      <div class="scan-step mono">review</div>
+      <div class="scan-instr">Check the detected colors — <b>tap any sticker to fix it</b>. Amber-ringed stickers were a close call: double-check those first. Centers are locked.</div>
+    </div>
+
+    <div class="net" id="net" data-testid="net"></div>
+
+    <div class="counts mono" id="counts"></div>
+    <p class="fine err" id="review-err" hidden></p>
+
+    <div class="cta-row">
+      <button class="btn primary grow" id="btn-solve" data-testid="btn-solve">
+        Solve it
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h15m0 0-6-6m6 6-6 6"/></svg>
+      </button>
+      <button class="btn ghost" id="btn-rescan">Rescan</button>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SOLVE ─────────── -->
+<section class="screen" id="s-solve">
+  <canvas id="c3d"></canvas>
+
+  <div class="hud-top">
+    <button class="btn tiny ghost" id="btn-new">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 6l-6 6 6 6"/></svg>
+      New scan
+    </button>
+    <div class="hud-progress mono" id="mv-count" data-testid="mv-count">0 / 0</div>
+    <button class="btn tiny ghost" id="btn-restart" data-testid="btn-restart">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10a8 8 0 1 1 2 6.9M4 10V4m0 6h6"/></svg>
+      Restart
+    </button>
+  </div>
+
+  <div class="hud-bottom">
+    <div class="mv-label mono" id="mv-label" data-testid="mv-label">·</div>
+    <div class="mv-strip" id="mv-strip"></div>
+    <div class="hud-controls">
+      <label class="auto mono" id="auto-wrap">
+        <input type="checkbox" id="btn-auto" data-testid="btn-auto" />
+        <span class="switch"></span> Auto-play
+      </label>
+      <button class="btn ghost" id="btn-prev" data-testid="btn-prev" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 6l-6 6 6 6"/></svg>
+        Prev
+      </button>
+      <button class="btn primary" id="btn-next" data-testid="btn-next">
+        Next
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+</section>
+
+<canvas id="sample-canvas" hidden></canvas>
+<script type="module" src="app.js"></script>
+</body>
+</html>
