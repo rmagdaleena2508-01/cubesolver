@@ -1,4 +1,4 @@
-# CubeSight - Scan and solve your rubiks cube
+# CubeSight - Scan and solve your rubiks cube (version 1)
 
 **Point your camera at a scrambled Rubik's Cube. Get a near-optimal solution, walked move-by-move on an interactive 3D cube. Runs entirely in the browser (no app, no backend, no build step).**
 
