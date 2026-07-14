@@ -1,4 +1,4 @@
-import { CubeView, PALETTE, invert } from './cube3d.js';
+import { CubeView, PALETTE, invert } from './cube3d.js?v=2';
 
 /* ───────────────── helpers ───────────────── */
 const $ = (id) => document.getElementById(id);
@@ -9,26 +9,36 @@ const show = (id) => {
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
 /* ───────────────── solver worker RPC ───────────────── */
-const worker = new Worker('worker.js');
-const rpc = (type, payload) => new Promise((res, rej) => {
-  const id = Math.random().toString(36).slice(2);
-  const onMsg = (e) => {
-    if (e.data.id !== id) return;
-    worker.removeEventListener('message', onMsg);
-    e.data.error ? rej(new Error(e.data.error)) : res(e.data.result);
-  };
-  worker.addEventListener('message', onMsg);
-  worker.postMessage({ id, type, payload });
-});
-
 const chip = $('solver-chip');
 const setChip = (state, text) => {
   chip.innerHTML = `<span class="chip-dot ${state}"></span>${text}`;
 };
-const solverReady = rpc('init')
-  .then(() => setChip('', 'solver: ready'))
-  .catch((e) => { setChip('err', 'solver: failed'); throw e; });
-solverReady.catch(() => {});
+
+let worker = null;
+let solverReady = null;
+
+const rpc = (type, payload) => new Promise((res, rej) => {
+  const w = worker;
+  const id = Math.random().toString(36).slice(2);
+  const onMsg = (e) => {
+    if (e.data.id !== id) return;
+    w.removeEventListener('message', onMsg);
+    e.data.error ? rej(new Error(e.data.error)) : res(e.data.result);
+  };
+  w.addEventListener('message', onMsg);
+  w.postMessage({ id, type, payload });
+});
+
+// (Re)spawn the solver worker — also used to recover if a solve ever hangs.
+function spawnWorker() {
+  worker = new Worker('worker.js?v=2');
+  setChip('warming', 'solver: warming up…');
+  solverReady = rpc('init')
+    .then(() => setChip('', 'solver: ready'))
+    .catch((e) => { setChip('err', 'solver: failed'); throw e; });
+  solverReady.catch(() => {});
+}
+spawnWorker();
 
 /* ───────────────── color science ───────────────── */
 function rgb2lab([r, g, b]) {
@@ -350,20 +360,50 @@ async function autoLoop() {
   }
 }
 
+const INVALID_HINTS = {
+  pieces: "at least one corner or edge has an impossible color combination — find the cubie that couldn't exist on a real cube",
+  twist: 'one corner looks twisted — the three stickers around a single corner are misread',
+  flip: 'one edge looks flipped — the two stickers of an edge piece are swapped',
+  parity: 'two stickers appear swapped somewhere',
+};
+const SOLVE_TIMEOUT = 15000;
+
 async function enterSolve(facelets) {
+  const btn = $('btn-solve');
+  const btnHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Solving…';
   setChipSolving(true);
   try {
     await solverReady;
-    const sol = await rpc('solve', facelets);
+    const sol = await Promise.race([
+      rpc('solve', facelets),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), SOLVE_TIMEOUT)),
+    ]);
     moves = sol.split(/\s+/).filter(Boolean);
-  } catch (err) {
-    $('review-err').textContent =
-      "That doesn't look like a valid cube — a sticker is probably misread. Tap the wrong ones to fix, then try again.";
-    $('review-err').hidden = false;
     setChipSolving(false);
+  } catch (err) {
+    let msg;
+    if (err.message === 'timeout') {
+      // Recover the stuck worker with a fresh one (rebuilds tables).
+      worker.terminate();
+      spawnWorker();
+      msg = 'The solver got stuck — that usually means a misread sticker slipped through. Re-check the colors (corners especially), then try again.';
+    } else if (err.message.startsWith('invalid:')) {
+      msg = `This scan can't be a real cube: ${INVALID_HINTS[err.message.slice(8)] || 'a sticker is misread'}. Tap stickers in the net to fix it, then try again.`;
+      setChipSolving(false);
+    } else {
+      msg = `Solver error (${err.message}). Check the sticker colors and try again.`;
+      setChipSolving(false);
+    }
+    $('review-err').textContent = msg;
+    $('review-err').hidden = false;
+    btn.disabled = false;
+    btn.innerHTML = btnHTML;
     return;
   }
-  setChipSolving(false);
+  btn.disabled = false;
+  btn.innerHTML = btnHTML;
 
   startFacelets = facelets;
   mi = 0; busy = false; stopAuto();
@@ -480,6 +520,7 @@ window.__cubesight = {
   _test: {
     setCaptured(c) { captured = c; },
     classify,
+    solve: (s) => rpc('solve', s),
     get letters() { return letters; },
     get uncertain() { return uncertain; },
   },
