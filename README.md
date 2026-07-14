@@ -95,7 +95,7 @@ This turns "which color is this pixel" into "which assignment of colors to posit
 
 ### Solvability validation & auto-repair
 
-A scan can have all the right colors — 9 of each — and still describe a cube that **cannot physically exist**: a corner twisted in place, an edge flipped, two pieces swapped. Kociemba's algorithm has no way to detect that; it just searches forever for a solution that doesn't exist.
+A scan can have all the right colors — 9 of each , and still describe a cube that **cannot physically exist**: a corner twisted in place, an edge flipped, two pieces swapped. Kociemba's algorithm has no way to detect that; it just searches forever for a solution that doesn't exist.
 
 `worker.js` validates the cube's actual piece permutation before ever calling the solver:
 
