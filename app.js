@@ -1,4 +1,4 @@
-import { CubeView, PALETTE, invert } from './cube3d.js?v=2';
+import { CubeView, PALETTE, invert } from './cube3d.js?v=3';
 
 /* ───────────────── helpers ───────────────── */
 const $ = (id) => document.getElementById(id);
@@ -31,7 +31,7 @@ const rpc = (type, payload) => new Promise((res, rej) => {
 
 // (Re)spawn the solver worker — also used to recover if a solve ever hangs.
 function spawnWorker() {
-  worker = new Worker('worker.js?v=2');
+  worker = new Worker('worker.js?v=3');
   setChip('warming', 'solver: warming up…');
   solverReady = rpc('init')
     .then(() => setChip('', 'solver: ready'))
@@ -374,13 +374,20 @@ async function enterSolve(facelets) {
   btn.disabled = true;
   btn.textContent = 'Solving…';
   setChipSolving(true);
+  let res;
   try {
     await solverReady;
-    const sol = await Promise.race([
+    res = await Promise.race([
       rpc('solve', facelets),
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), SOLVE_TIMEOUT)),
     ]);
-    moves = sol.split(/\s+/).filter(Boolean);
+    moves = res.solution.split(/\s+/).filter(Boolean);
+    // The worker may have auto-corrected the scan (rotated faces / mirrored
+    // color scheme) — adopt its facelets everywhere.
+    facelets = res.facelets;
+    FACE_ORDER.forEach((f, fi) => {
+      letters[f] = facelets.slice(fi * 9, fi * 9 + 9).split('');
+    });
     setChipSolving(false);
   } catch (err) {
     let msg;
@@ -413,7 +420,23 @@ async function enterSolve(facelets) {
   buildStrip();
   renderHud();
 
+  if (res.repaired) {
+    toast(
+      `auto-corrected ${res.repaired} rotated face${res.repaired > 1 ? 's' : ''} from your scan — ` +
+      `check the 3-D cube matches yours before following moves`
+    );
+  }
+
   try { navigator.wakeLock?.request('screen'); } catch {}
+}
+
+let toastTimer = null;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 7000);
 }
 function setChipSolving(on) {
   if (on) setChip('warming', 'solver: thinking…');

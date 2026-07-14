@@ -30,6 +30,43 @@ function validate(c) {
   return null;
 }
 
+// Rotate a face's 9 facelets k quarter-turns clockwise (as viewed head-on).
+function rotFace(f, k) {
+  let a = f.split('');
+  k = ((k % 4) + 4) % 4;
+  while (k--) {
+    const b = a.slice();
+    for (let r = 0; r < 3; r++)
+      for (let c = 0; c < 3; c++) b[3 * r + c] = a[3 * (2 - c) + r];
+    a = b;
+  }
+  return a.join('');
+}
+
+// If every color is right but the U (white) or D (yellow) face was captured
+// rotated — the tilt steps are the easy ones to get wrong — the true cube is
+// a U/D rotation combo of the scan. Only these two faces are searched, and a
+// repair is accepted only if EXACTLY ONE combo validates: both restrictions
+// keep a genuine color misread from being silently "repaired" into a valid
+// but wrong cube. (Side faces are anchored by "white on top" during capture.)
+function repairSearchUD(s54) {
+  const uFace = s54.slice(0, 9);        // U is face 0 in URFDLB order
+  const dFace = s54.slice(27, 36);      // D is face 3
+  const hits = [];
+  for (let kU = 0; kU < 4; kU++) for (let kD = 0; kD < 4; kD++) {
+    if (!kU && !kD) continue; // identity already failed validation
+    const cand =
+      rotFace(uFace, kU) + s54.slice(9, 27) + rotFace(dFace, kD) + s54.slice(36);
+    try {
+      if (!validate(Cube.fromString(cand))) {
+        hits.push({ cand, changes: (kU ? 1 : 0) + (kD ? 1 : 0) });
+        if (hits.length > 1) return null; // ambiguous → don't guess
+      }
+    } catch { /* impossible pieces — not a repair */ }
+  }
+  return hits.length === 1 ? hits[0] : null;
+}
+
 self.onmessage = (e) => {
   const { id, type, payload } = e.data;
   const reply = (result, error) => self.postMessage({ id, result, error: error || null });
@@ -57,12 +94,24 @@ self.onmessage = (e) => {
 
     } else if (type === 'solve') {
       if (!ready) { Cube.initSolver(); ready = true; }
-      const c = Cube.fromString(payload);
-      const why = validate(c);
+      let s = payload, repaired = 0;
+      let c = Cube.fromString(s);
+      let why = validate(c);
+
+      if (why) {
+        // Colors may be right but the white/yellow face captured rotated —
+        // try the unique U/D rotation repair before declaring it invalid.
+        const fix = repairSearchUD(s);
+        if (fix) {
+          s = fix.cand; repaired = fix.changes;
+          c = Cube.fromString(s); why = null;
+        }
+      }
       if (why) { reply(null, 'invalid:' + why); return; }
-      const sol = c.solve(22); // two-phase, near-optimal (~18–22 moves)
+
+      let sol = c.solve(22); // two-phase, near-optimal (~18–22 moves)
       if (!sol) throw new Error('no solution found');
-      reply(sol.trim());
+      reply({ solution: sol.trim(), facelets: s, repaired });
     }
   } catch (err) {
     reply(null, (err && err.message) ? err.message : String(err));
