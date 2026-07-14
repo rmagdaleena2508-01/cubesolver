@@ -44,7 +44,18 @@ const easeInOut = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) /
 export class CubeView {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    // Some machines fail to create an antialiased context (old GPUs, or
+    // hardware acceleration disabled) — retry without AA before giving up,
+    // and throw a clear error instead of leaving a silently blank canvas.
+    try {
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    } catch (e1) {
+      try {
+        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
+      } catch (e2) {
+        throw new Error('WebGL unavailable — ' + (e2?.message || e2));
+      }
+    }
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 
     this.scene = new THREE.Scene();

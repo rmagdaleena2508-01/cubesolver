@@ -1,4 +1,4 @@
-import { CubeView, PALETTE, invert } from './cube3d.js?v=3';
+import { CubeView, PALETTE, invert } from './cube3d.js?v=4';
 
 /* ───────────────── helpers ───────────────── */
 const $ = (id) => document.getElementById(id);
@@ -31,7 +31,7 @@ const rpc = (type, payload) => new Promise((res, rej) => {
 
 // (Re)spawn the solver worker — also used to recover if a solve ever hangs.
 function spawnWorker() {
-  worker = new Worker('worker.js?v=3');
+  worker = new Worker('worker.js?v=4');
   setChip('warming', 'solver: warming up…');
   solverReady = rpc('init')
     .then(() => setChip('', 'solver: ready'))
@@ -337,7 +337,7 @@ function buildStrip() {
 async function doNext() {
   if (busy || mi >= moves.length) return;
   busy = true; renderHud();
-  await view.turn(moves[mi]);
+  if (view) await view.turn(moves[mi]);
   mi++; busy = false; renderHud();
   if (mi >= moves.length) stopAuto();
 }
@@ -346,7 +346,7 @@ async function doPrev() {
   stopAuto();
   busy = true; renderHud();
   mi--;
-  await view.turn(invert(moves[mi]));
+  if (view) await view.turn(invert(moves[mi]));
   busy = false; renderHud();
 }
 function stopAuto() {
@@ -415,8 +415,19 @@ async function enterSolve(facelets) {
   startFacelets = facelets;
   mi = 0; busy = false; stopAuto();
   show('s-solve');
-  if (!view) view = new CubeView($('c3d'));
-  view.setState(facelets);
+  try {
+    if (!view) view = new CubeView($('c3d'));
+    view.setState(facelets);
+  } catch (e) {
+    // No WebGL — keep the app usable: the move label + strip still guide you.
+    view = null;
+    toast(
+      `3-D view failed: ${e.message}. This usually means hardware acceleration ` +
+      `is turned off in your browser — enable it and reload. ` +
+      `The move list below still works.`,
+      true
+    );
+  }
   buildStrip();
   renderHud();
 
@@ -431,12 +442,12 @@ async function enterSolve(facelets) {
 }
 
 let toastTimer = null;
-function toast(text) {
+function toast(text, sticky = false) {
   const el = $('toast');
   el.textContent = text;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 7000);
+  if (!sticky) toastTimer = setTimeout(() => el.classList.remove('show'), 7000);
 }
 function setChipSolving(on) {
   if (on) setChip('warming', 'solver: thinking…');
@@ -527,7 +538,7 @@ $('btn-restart').addEventListener('click', () => {
   if (busy) return;
   stopAuto();
   mi = 0;
-  view.setState(startFacelets);
+  view?.setState(startFacelets);
   renderHud();
 });
 $('btn-new').addEventListener('click', () => {
