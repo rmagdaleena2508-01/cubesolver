@@ -3,6 +3,7 @@
 **Point your camera at a scrambled Rubik's Cube. Get a near-optimal solution, walked move-by-move on an interactive 3D cube. Runs entirely in the browser (no app, no backend, no build step).**
 
 🔗 **Live:** [rmagdaleena2508-01.github.io/cubesolver](https://rmagdaleena2508-01.github.io/cubesolver/)
+   **vercel link** : https://cubesight.vercel.app/
 
 
 ---
